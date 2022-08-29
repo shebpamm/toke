@@ -25,11 +25,14 @@ fn execute() {
 }
 
 pub fn start() {
-    let settings = config::get_settings();
+    let settings = config::get_settings().unwrap();
 
-    let stdout = fs::File::create("info.log").unwrap();
-    let stderr = fs::File::create("err.log").unwrap();
+    let stdout_path: String = settings.get("stdout").unwrap();
+    let stderr_path: String = settings.get("stderr").unwrap();
     let pidfile: String = settings.get("pidfile").unwrap();
+
+    let stdout = fs::File::create(stdout_path).unwrap();
+    let stderr = fs::File::create(stderr_path).unwrap();
 
     if Path::new(&pidfile).exists() {
         println!("Daemon already running!");
@@ -57,7 +60,7 @@ pub fn start() {
 }
 
 pub fn stop() {
-    let settings = config::get_settings();
+    let settings = config::get_settings().unwrap();
     let pidfile: String = settings.get("pidfile").unwrap();
 
     let pid = fs::read_to_string(&pidfile).expect("Unable to read pidfile").parse::<i32>().unwrap();
