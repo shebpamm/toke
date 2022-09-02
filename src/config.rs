@@ -4,10 +4,10 @@ use std::fs;
 
 pub fn get_settings() -> Result<Config, ConfigError> {
 
-    let xdg_dirs = xdg::BaseDirectories::with_prefix("toke").unwrap();
-    let pid_path = xdg_dirs.place_runtime_file("toke.pid")
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("toket").unwrap();
+    let pid_path = xdg_dirs.place_runtime_file("toket.pid")
                         .expect("cannot create pid directory");
-    let socket_path = xdg_dirs.place_runtime_file("toke.socket")
+    let socket_path = xdg_dirs.place_runtime_file("toket.socket")
                         .expect("cannot create socket directory");
     let config_path = xdg_dirs.place_config_file("config.toml")
                         .expect("cannot create configuration directory");
@@ -25,7 +25,6 @@ pub fn get_settings() -> Result<Config, ConfigError> {
         .unwrap();
 
     Config::builder()
-        // Add in `./toke-config.toml`
         .add_source(config::File::with_name(&config_path.into_os_string().into_string().unwrap()))
         // Add in settings from the environment (with a prefix of APP)
         // Eg.. `APP_DEBUG=1 ./target/app` would set the `debug` key

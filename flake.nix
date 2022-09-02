@@ -42,7 +42,7 @@
 
       defaultApp = forAllSystems (system: {
         type = "app";
-        program = "${self.packages.${system}.toke-rs}/bin/toke";
+        program = "${self.packages.${system}.toke-rs}/bin/toket";
       });
 
       devShell = forAllSystems (system:

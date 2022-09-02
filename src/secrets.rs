@@ -58,8 +58,8 @@ pub fn set_secret<'a>(ss: &'a SecretService, label: &str, attributes: HashMap<&s
 pub fn credentials_present() -> bool {
     let ss = SecretService::new(EncryptionType::Dh).unwrap();
 
-    let username = get_secret_string(&ss, vec![("app", "toke"), ("role", "vault-username")]);
-    let password = get_secret_string(&ss, vec![("app", "toke"), ("role", "vault-password")]);
+    let username = get_secret_string(&ss, vec![("app", "toket"), ("role", "vault-username")]);
+    let password = get_secret_string(&ss, vec![("app", "toket"), ("role", "vault-password")]);
 
     match username.and(password) {
         Ok(_value) => return true,
@@ -73,22 +73,22 @@ pub fn set_login_credentials(username: &str, password: &str) {
     let mut username_attrs = HashMap::new();
     let mut password_attrs = HashMap::new();
 
-    username_attrs.insert("app", "toke");
-    password_attrs.insert("app", "toke");
+    username_attrs.insert("app", "toket");
+    password_attrs.insert("app", "toket");
 
     username_attrs.insert("role", "vault-username");
-    set_secret(&ss, "toke-username", username_attrs, username);
+    set_secret(&ss, "toket-username", username_attrs, username);
 
     password_attrs.insert("role", "vault-password");
-    set_secret(&ss, "toke-password", password_attrs, password);
+    set_secret(&ss, "toket-password", password_attrs, password);
 
 }
 
 pub fn get_login_credentials() -> Result<(String, String), Box<dyn error::Error>> {
     let ss = SecretService::new(EncryptionType::Dh).unwrap();
 
-    let username = get_secret_string(&ss, vec![("app", "toke"), ("role", "vault-username")])?;
-    let password = get_secret_string(&ss, vec![("app", "toke"), ("role", "vault-password")])?;
+    let username = get_secret_string(&ss, vec![("app", "toket"), ("role", "vault-username")])?;
+    let password = get_secret_string(&ss, vec![("app", "toket"), ("role", "vault-password")])?;
 
     return Ok((username, password));
 }
