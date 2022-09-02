@@ -9,7 +9,7 @@ mod daemon;
 mod config;
 mod secrets;
 
-/// Simple program to greet a person
+/// Vault token manager
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 struct CLI {
