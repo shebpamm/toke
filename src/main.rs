@@ -1,6 +1,10 @@
 use clap::{Parser, Subcommand, Args};
 use strum_macros::EnumString;
 
+use std::path::Path;
+use std::os::unix::net::UnixStream;
+use std::io::prelude::*;
+
 mod daemon;
 mod config;
 mod secrets;
@@ -22,13 +26,8 @@ struct Auth {
 
 #[derive(Debug, Subcommand)]
 enum Commands {
-    /// Shell Env Commands
-    #[clap(arg_required_else_help = true)]
-    Env {
-        /// The remote to clone
-        command: String,
-    },
-    /// Manage Daemon
+    /// Get cached token
+    Token,
     Daemon {
         /// start/stop/restart
         #[clap(default_value = "start")]
@@ -99,13 +98,27 @@ fn manage_auth(auth: Auth) {
 
 }
 
+fn give_token() {
+    let settings = config::get_settings().unwrap();
+    let socket_path: String = settings.get("socketfile").unwrap();
+
+    if !Path::new(&socket_path).exists() {
+        eprintln!("Daemon not running!");
+        return
+    }
+
+    let mut stream = UnixStream::connect(&socket_path).unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+
+    println!("{response}");
+}
+
 fn main() {
     let args = CLI::parse();
 
     match args.command {
-        Commands::Env { command } => {
-            println!("{}", command);
-        },
+        Commands::Token => give_token(),
 
         Commands::Daemon { state } => manage_daemon(state),
 

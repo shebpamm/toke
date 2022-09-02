@@ -12,7 +12,7 @@
 
   outputs = { self, nixpkgs-unstable, flake-utils, ...}:
     let
-      version = "0.0.1";
+      version = "0.1.0";
       supportedSystems = [ "x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
       forAllSystems = nixpkgs-unstable.lib.genAttrs supportedSystems;
 
@@ -26,10 +26,13 @@
             pname = "toke-rs";
             inherit version;
             src = ./.;
-            cargoSha256 = "sha256-ZbJc3BTpVZ9vc/PvthXycuuYN6GdqgLQtt8kaUCUCB4=";
+            cargoSha256 = "sha256-Twv4DeXil/kxwTvYlM0MVFu17XOdqLbsbLBKAT+N9wk=";
+
+            nativeBuildInputs = [pkgs.pkg-config];
+            buildInputs = [pkgs.openssl.dev];
             
             meta = with pkgs.lib; {
-              description = "Small utility for adding ansible roles from a remote source";
+              description = "Never let your vault token expire";
               license = licenses.mit;
             };
           };
