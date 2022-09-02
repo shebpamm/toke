@@ -12,29 +12,79 @@ use std::os::unix::net::UnixListener;
 use std::os::unix::net::UnixStream;
 use std::io::Write;
 
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
+use std::time::Duration;
 
 use nix::unistd::Pid;
 use nix::sys::signal::{self, Signal};
 
+use reqwest::header::{HeaderMap, HeaderValue};
+use reqwest::blocking;
+
+use serde::Deserialize;
+
 use super::config;
 use super::secrets;
 
+
 pub use daemonize_me::Daemon;
 
-
+macro_rules! hashmap {
+    ($( $key: expr => $val: expr ),*) => {{
+         let mut map = ::std::collections::HashMap::new();
+         $( map.insert($key, $val); )*
+         map
+    }}
+}
 
 fn after_init(_: Option<&dyn Any>) {
     println!("Initialized the daemon!");
     return
 }
 
-fn token_from_ldap() -> String {
-    return "asd".to_string();
+fn token_valid(token: &str) -> Result<bool, reqwest::Error> {
+    let vault_addr: String = env::vars().find(|(key, _value)| key == "VAULT_ADDR").map(|v|v.1).unwrap();
+
+    let client = blocking::Client::new();
+    let res = client.get(format!("{}/v1/auth/token/lookup-self", vault_addr))
+        .bearer_auth(token)
+        .send()?;
+
+    return Ok(res.status().is_success());
+
 }
 
-fn token_valid(token: &str) -> bool {
-    return true; 
+#[derive(Deserialize)]
+struct VaultAuthDetails {
+    client_token: String,
+    policies: Vec<String>,
+    lease_duration: u32,
+    renewable: bool 
+}
+
+#[derive(Deserialize)]
+struct VaultLoginResponse {
+    lease_id: String,
+    renewable: bool,
+    lease_duration: u32,
+    auth: VaultAuthDetails,
+}
+
+
+fn token_from_ldap() -> Result<String, reqwest::Error> {
+    let vault_addr: String = env::vars().find(|(key, _value)| key == "VAULT_ADDR").map(|v|v.1).unwrap();
+    let (username, password) = secrets::get_login_credentials().unwrap();
+
+    let client = blocking::Client::new();
+    let res = client.post(format!("{}/v1/auth/ldap/login/{}", vault_addr, username))
+        .json(&hashmap!["password" => password])
+        .send()?;
+
+    println!("{:?}", res);
+
+    let data: VaultLoginResponse = res.json()?;
+    
+    return Ok(data.auth.client_token);
+
 }
 
 fn handle_client(mut stream: UnixStream, token_mutex: Arc<Mutex<String>>) {
@@ -45,23 +95,40 @@ fn handle_client(mut stream: UnixStream, token_mutex: Arc<Mutex<String>>) {
 
 fn refresh_token_loop(token_mutex: Arc<Mutex<String>>) {
     loop {
-        thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(60000)); //Once a minute
 
         let mut token = token_mutex.lock().unwrap();
 
-        *token = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_millis()
-        .to_string();
+        let result: bool = match token_valid(&token) {
+            Ok(result) => result,
+            Err(error) => {
+                eprintln!("Result error: {error}");
+                continue;
+            },
+        };
 
+        if !result {
+            let new_token = match token_from_ldap() {
+                Ok(new_token) => new_token,
+                Err(error) => {
+                    eprintln!("Token error: {error}");
+                    continue;
+                },
+            };
+            *token = new_token;
+        };
     }
 }
 
 fn execute<'a>() {
     let settings = config::get_settings().unwrap();
 
-    let current_token: String = env::vars().find(|(key, _value)| key == "VAULT_TOKEN").map_or(token_from_ldap(), |var| var.1);
+    let current_token: String = env::vars()
+                                .find(|(key, _value)| key == "VAULT_TOKEN")
+                                .map_or(
+                                    token_from_ldap()
+                                        .unwrap_or("".to_string()), 
+                                    |var| var.1);
 
     let token_mutex = Arc::new(Mutex::new(current_token));
 
