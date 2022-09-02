@@ -11,7 +11,9 @@ clap = { version = "3.2.17", features = ["derive"] }
 config = { version = "0.13.2", features = ["toml", "yaml"] }
 daemonize-me = "2.0.1"
 nix = "0.25.0"
+reqwest = { version = "0.11.11", features = ["blocking", "json"] }
 secret-service = "2.0.2"
+serde = { version = "1.0.144", features = ["derive"] }
 strum = "0.24.1"
 strum_macros = "0.24.3"
 users = "0.11.0"
