@@ -17,7 +17,6 @@ use std::time::Duration;
 use nix::unistd::Pid;
 use nix::sys::signal::{self, Signal};
 
-use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::blocking;
 
 use serde::Deserialize;
