@@ -1,21 +1,22 @@
 extern crate daemonize_me;
 
 use std::any::Any;
-use std::fs;
-use std::process::exit;
-use std::path::Path;
 use std::env;
-use std::thread;
+use std::fs;
+use std::path::Path;
+use std::process::exit;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
+use std::io::Read;
+use std::io::Write;
 use std::os::unix::net::UnixListener;
 use std::os::unix::net::UnixStream;
-use std::io::Write;
 
 use std::time::Duration;
 
-use nix::unistd::Pid;
 use nix::sys::signal::{self, Signal};
+use nix::unistd::Pid;
 
 use reqwest::blocking;
 
@@ -23,7 +24,6 @@ use serde::Deserialize;
 
 use super::config;
 use super::secrets;
-
 
 pub use daemonize_me::Daemon;
 
@@ -37,19 +37,22 @@ macro_rules! hashmap {
 
 fn after_init(_: Option<&dyn Any>) {
     println!("Initialized the daemon!");
-    return
+    return;
 }
 
 fn token_valid(token: &str) -> Result<bool, reqwest::Error> {
-    let vault_addr: String = env::vars().find(|(key, _value)| key == "VAULT_ADDR").map(|v|v.1).unwrap();
+    let vault_addr: String = env::vars()
+        .find(|(key, _value)| key == "VAULT_ADDR")
+        .map(|v| v.1)
+        .unwrap();
 
     let client = blocking::Client::new();
-    let res = client.get(format!("{}/v1/auth/token/lookup-self", vault_addr))
+    let res = client
+        .get(format!("{}/v1/auth/token/lookup-self", vault_addr))
         .bearer_auth(token)
         .send()?;
 
     return Ok(res.status().is_success());
-
 }
 
 #[derive(Deserialize)]
@@ -57,7 +60,7 @@ struct VaultAuthDetails {
     client_token: String,
     policies: Vec<String>,
     lease_duration: u32,
-    renewable: bool 
+    renewable: bool,
 }
 
 #[derive(Deserialize)]
@@ -68,54 +71,82 @@ struct VaultLoginResponse {
     auth: VaultAuthDetails,
 }
 
-
 fn token_from_ldap() -> Result<String, reqwest::Error> {
-    let vault_addr: String = env::vars().find(|(key, _value)| key == "VAULT_ADDR").map(|v|v.1).unwrap();
+    let vault_addr: String = env::vars()
+        .find(|(key, _value)| key == "VAULT_ADDR")
+        .map(|v| v.1)
+        .unwrap();
     let (username, password) = secrets::get_login_credentials().unwrap();
 
     let client = blocking::Client::new();
-    let res = client.post(format!("{}/v1/auth/ldap/login/{}", vault_addr, username))
+    let res = client
+        .post(format!("{}/v1/auth/ldap/login/{}", vault_addr, username))
         .json(&hashmap!["password" => password])
         .send()?;
 
     println!("{:?}", res);
 
     let data: VaultLoginResponse = res.json()?;
-    
-    return Ok(data.auth.client_token);
 
+    return Ok(data.auth.client_token);
 }
 
 fn handle_client(mut stream: UnixStream, token_mutex: Arc<Mutex<String>>) {
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+
+    println!("{response}");
+
+    let result = match response.trim() {
+        "refresh" => stream.write_all(refresh_token(&token_mutex).to_string().as_bytes()),
+        "read" => provide_token(stream, token_mutex),
+        unsupported => stream.write_all(unsupported.as_bytes()),
+    };
+
+    match result {
+        Ok(result) => result,
+        Err(error) => eprintln!("Result error: {error}"),
+    }
+}
+
+fn provide_token(
+    mut stream: UnixStream,
+    token_mutex: Arc<Mutex<String>>,
+) -> Result<(), std::io::Error> {
     let token = token_mutex.lock().unwrap();
 
-    stream.write_all(*&token.as_bytes());
+    stream.write_all(*&token.as_bytes())
+}
+
+fn refresh_token(token_mutex: &Arc<Mutex<String>>) -> bool {
+    let mut token = token_mutex.lock().unwrap();
+    let result: bool = match token_valid(&token) {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("Result error: {error}");
+            return false;
+        }
+    };
+
+    if !result {
+        let new_token = match token_from_ldap() {
+            Ok(new_token) => new_token,
+            Err(error) => {
+                eprintln!("Token error: {error}");
+                return false;
+            }
+        };
+        *token = new_token;
+        return true;
+    };
+
+    return false;
 }
 
 fn refresh_token_loop(token_mutex: Arc<Mutex<String>>) {
     loop {
+        refresh_token(&token_mutex);
         thread::sleep(Duration::from_millis(60000)); //Once a minute
-
-        let mut token = token_mutex.lock().unwrap();
-
-        let result: bool = match token_valid(&token) {
-            Ok(result) => result,
-            Err(error) => {
-                eprintln!("Result error: {error}");
-                continue;
-            },
-        };
-
-        if !result {
-            let new_token = match token_from_ldap() {
-                Ok(new_token) => new_token,
-                Err(error) => {
-                    eprintln!("Token error: {error}");
-                    continue;
-                },
-            };
-            *token = new_token;
-        };
     }
 }
 
@@ -123,11 +154,8 @@ fn execute<'a>() {
     let settings = config::get_settings().unwrap();
 
     let current_token: String = env::vars()
-                                .find(|(key, _value)| key == "VAULT_TOKEN")
-                                .map_or(
-                                    token_from_ldap()
-                                        .unwrap_or("".to_string()), 
-                                    |var| var.1);
+        .find(|(key, _value)| key == "VAULT_TOKEN")
+        .map_or(token_from_ldap().unwrap_or("".to_string()), |var| var.1);
 
     let token_mutex = Arc::new(Mutex::new(current_token));
 
@@ -155,7 +183,6 @@ fn execute<'a>() {
 }
 
 pub fn start() {
-    
     if !secrets::credentials_present() {
         println!("Credentials not present! Please configure them first.");
         return;
@@ -172,7 +199,7 @@ pub fn start() {
 
     if Path::new(&pidfile).exists() {
         println!("Daemon already running!");
-        return
+        return;
     }
 
     let daemon = Daemon::new()
@@ -189,7 +216,7 @@ pub fn start() {
         Err(e) => {
             eprintln!("Error, {}", e);
             exit(-1);
-        },
+        }
     }
 
     execute();
@@ -200,8 +227,11 @@ pub fn stop() {
     let pidfile: String = settings.get("pidfile").unwrap();
     let socket_path: String = settings.get("socketfile").unwrap();
 
-    let pid = fs::read_to_string(&pidfile).expect("Unable to read pidfile").parse::<i32>().unwrap();
-    
+    let pid = fs::read_to_string(&pidfile)
+        .expect("Unable to read pidfile")
+        .parse::<i32>()
+        .unwrap();
+
     signal::kill(Pid::from_raw(pid), Signal::SIGTERM).unwrap();
 
     fs::remove_file(&pidfile).unwrap();
