@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::net::Shutdown;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
+use std::time::Duration;
 
 mod config;
 mod daemon;
@@ -135,6 +136,11 @@ fn write_to_socket(command: &str) -> String {
     }
 
     let mut stream = UnixStream::connect(&socket_path).unwrap();
+
+    let timeout_millis = Duration::from_millis(300);
+
+    stream.set_read_timeout(Some(timeout_millis)).unwrap();
+    stream.set_write_timeout(Some(timeout_millis)).unwrap();
 
     match stream.write_all(command.as_bytes()) {
         Ok(_) => {
