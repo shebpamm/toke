@@ -28,7 +28,7 @@
             pname = "toke-rs";
             inherit version;
             src = ./.;
-            cargoSha256 = "sha256-Twv4DeXil/kxwTvYlM0MVFu17XOdqLbsbLBKAT+N9wk=";
+            cargoSha256 = "sha256-20pL74xQ2vSSdy6VicbthINf7i+8sK7QgpF6zBC1XiA=";
 
             nativeBuildInputs = [ pkgs.pkg-config ];
             buildInputs = [ pkgs.openssl.dev ];
@@ -55,6 +55,7 @@
         pkgs.mkShell {
           packages = with pkgs; [
             rust-analyzer
+            cargo
             rustup
             bashInteractive
             openssl.dev
